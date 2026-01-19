@@ -1,8 +1,6 @@
 # Monte Carlo Option Pricing
 
-A small, test-driven Monte Carlo option pricing library in Python.
-
----
+ A research-grade Monte Carlo option pricing library with Python and C++ backends.
 
 ## Setup
 
@@ -94,7 +92,6 @@ Speedup: 6.16x
 Benchmark script: benchmarks/bench_lsm_cpp_vs_py.py
 
 ## Notes
-	•	Benchmark outputs are written to artifacts/ (ignored by git)
-	•	If you switch to native arm64 Python, rebuild the extension with:
-
+Benchmark outputs are written to artifacts/ (ignored by git)
+If you switch to native arm64 Python, rebuild the extension with:
 -DCMAKE_OSX_ARCHITECTURES=arm64
