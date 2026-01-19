@@ -18,19 +18,13 @@ def american_option_lsm(
     is_call: bool,
     degree: int = 2,
     q: float = 0.0,
-) -> float:
+    return_cashflows: bool = False,
+) -> float | tuple[float, np.ndarray]:
     """
     Longstaff–Schwartz Monte Carlo pricer for American options.
 
-    Inputs
-    ------
-    paths : ndarray (n_paths, n_steps+1)
-        Simulated underlying paths under the risk-neutral measure.
-
-    Returns
-    -------
-    price : float
-        Estimated time-0 price.
+    If return_cashflows=True, returns (price, discounted_cashflows_per_path),
+    where discounted_cashflows_per_path are discounted to time 0.
     """
     n_paths, n_cols = paths.shape
     n_steps = n_cols - 1
@@ -84,4 +78,6 @@ def american_option_lsm(
     # discount cashflows from time 1 to time 0 (one more step)
     cashflow = cashflow * disc
     price = float(np.mean(cashflow))
+    if return_cashflows:
+        return price, cashflow
     return price
