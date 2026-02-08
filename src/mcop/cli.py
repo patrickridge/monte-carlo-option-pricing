@@ -1,17 +1,15 @@
 # src/mcop/cli.py
 
 import argparse
-import sys
-import numpy as np
 
 from mcop.simulate_paths import simulate_gbm_paths
 from mcop.american_lsm import american_option_lsm
-from mcop.american_lsm_cpp import american_option_lsm_cpp
 
 
 def cmd_price(args: argparse.Namespace) -> None:
     """
     Price an American option using LSM (Python or C++).
+    Simulates GBM paths then runs LSM backward induction.
     """
     paths = simulate_gbm_paths(
         S0=args.S0,
@@ -26,6 +24,15 @@ def cmd_price(args: argparse.Namespace) -> None:
     )
 
     if args.engine == "cpp":
+        # Lazy import so Python engine works even if the C++ extension isn't built
+        try:
+            from mcop.american_lsm_cpp import american_option_lsm_cpp
+        except Exception as e:
+            raise SystemExit(
+                "C++ engine requested but C++ extension is not available.\n"
+                "Build it first (see README), or run with --engine python."
+            ) from e
+
         price = american_option_lsm_cpp(
             paths,
             K=args.K,
@@ -45,7 +52,12 @@ def cmd_price(args: argparse.Namespace) -> None:
             q=args.q,
         )
 
-    print(f"American option price ({args.engine}): {price:.6f}")
+    opt_type = "call" if args.call else "put"
+    print(
+        f"American {opt_type} price (LSM, {args.engine}): {price:.6f} "
+        f"[S0={args.S0}, K={args.K}, T={args.T}, r={args.r}, q={args.q}, sigma={args.sigma}, "
+        f"steps={args.n_steps}, paths={args.n_paths}, degree={args.degree}]"
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -69,8 +81,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_price.add_argument("--sigma", type=float, default=0.2)
     p_price.add_argument("--T", type=float, default=1.0)
 
-    p_price.add_argument("--n-steps", type=int, default=100)
-    p_price.add_argument("--n-paths", type=int, default=50_000)
+    p_price.add_argument("--n-steps", dest="n_steps", type=int, default=100)
+    p_price.add_argument("--n-paths", dest="n_paths", type=int, default=50_000)
     p_price.add_argument("--degree", type=int, default=2)
     p_price.add_argument("--seed", type=int, default=123)
 
