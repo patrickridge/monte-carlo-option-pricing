@@ -7,6 +7,7 @@ name = "mcop"
 version = "0.1.0"
 description = "Monte Carlo option pricing (European + American via LSM)"
 authors = [{name="Patrick Ridge"}]
+license = {text = "MIT"}
 requires-python = ">=3.10"
 dependencies = [
     "numpy",
@@ -14,11 +15,18 @@ dependencies = [
     "matplotlib",
 ]
 
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[project.urls]
+Homepage = "https://github.com/patrickridge/monte-carlo-option-pricing"
+Repository = "https://github.com/patrickridge/monte-carlo-option-pricing"
+
+[project.scripts]
+mcop = "mcop.cli:main"
+
 [tool.setuptools]
 package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
-
-[project.scripts]
-mcop = "mcop.cli:main"

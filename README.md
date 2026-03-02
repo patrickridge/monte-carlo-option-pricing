@@ -1,97 +1,153 @@
 # Monte Carlo Option Pricing
 
- A research-grade Monte Carlo option pricing library with Python and C++ backends.
+![Python](https://img.shields.io/badge/python-3.10%2B-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
 
-## Setup
+A research-grade Monte Carlo option pricing library with pure-Python and optional C++ backends.
 
-Create and activate a virtual environment, then install the package in editable mode:
+Supports European and American options under Geometric Brownian Motion (GBM), including:
 
-bash
+- Discounted Monte Carlo estimator with 95% confidence intervals
+- American options via the **Longstaff–Schwartz (LSM)** algorithm
+- Optional **C++ acceleration** (pybind11 + Eigen) — ~6× speedup for the LSM backward pass
+- Validation against **Black–Scholes** (European) and **Cox–Ross–Rubinstein binomial tree** (American)
+- Variance reduction via **antithetic variates** and **control variates**
+- CLI for quick pricing from the command line
+
+---
+
+## Installation
+
+```bash
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install -U pip setuptools wheel
-python -m pip install -e .
-python -m pip install pytest
+pip install -e ".[dev]"
+```
+
+This installs the package in editable mode along with `pytest`.
+
+---
+
+## Quickstart
+
+```bash
+# Price an American put under GBM using LSM (Python engine)
+mcop price --S0 100 --K 100 --r 0.05 --sigma 0.2 --T 1 --n-paths 50000
+
+# Price a call instead of a put
+mcop price --S0 100 --K 100 --r 0.05 --sigma 0.2 --T 1 --call
+
+# Use the C++ engine (requires building the extension first — see below)
+mcop price --engine cpp --n-paths 50000
 
 # Run tests
 pytest -q
+```
+
+---
+
+## Python API
+
+```python
+from mcop import simulate_gbm_paths, american_option_lsm, mc_price, european_call
+
+# Simulate GBM paths
+paths = simulate_gbm_paths(S0=100, r=0.05, sigma=0.2, T=1.0, n_steps=100, n_paths=50_000)
+
+# Price an American put with LSM
+price = american_option_lsm(paths, K=100, r=0.05, T=1.0, is_call=False)
+
+# Price a European call with MC + confidence interval
+payoffs = european_call(paths[:, -1], K=100)
+price, se, ci_low, ci_high = mc_price(payoffs, r=0.05, T=1.0)
+```
+
+---
 
 ## Features
-	•	Geometric Brownian Motion (GBM) simulation under the risk-neutral measure
-	•	European call and put payoffs
-	•	Discounted Monte Carlo estimator with standard error and 95% confidence interval
-	•	Validation against Black–Scholes closed-form pricing (pytest)
-	•	American option pricing via Longstaff–Schwartz (LSM)
-	•	Variance reduction utilities (control variates)
-	•	Optional C++ acceleration via pybind11 and Eigen
 
-## American Options (LSM)
+| Feature | Notes |
+|---------|-------|
+| GBM simulation | Exact discretization, dividend yield `q`, antithetic variates |
+| European options | Call and put payoffs with discounted MC estimator |
+| American options | Longstaff–Schwartz LSM, configurable polynomial basis degree |
+| C++ acceleration | pybind11 + Eigen, ~6× faster LSM backward pass |
+| Control variates | Variance reduction using a correlated control with known mean |
+| CLI | `mcop price` with full parameter control |
+| Notebooks | Demo and convergence plots in `notebooks/` |
+| Benchmarks | LSM accuracy vs CRR binomial, Python vs C++ timing |
 
-American options are priced using the Longstaff–Schwartz (least-squares Monte Carlo)
-algorithm. Correctness is validated against a Cox–Ross–Rubinstein (CRR) binomial tree
-reference.
+---
 
-See notebooks/american_lsm_demo.ipynb for convergence plots versus the CRR price.
+## C++ Acceleration (Optional, macOS)
 
-## C++ Acceleration (Optional)
+The C++ backend accelerates the LSM backward induction step using Eigen for linear algebra.
 
-This repository includes an optional C++ core (Eigen + pybind11) for the
-Longstaff–Schwartz backward induction step. The Python and C++ implementations are
-numerically consistent and validated by tests.
+### Requirements
 
-## Requirements (macOS)
-
-Install build dependencies via Homebrew:
-
+```bash
 brew install cmake eigen pybind11
+```
 
-## Important: Python Architecture Must Match Build Architecture
+> **Note:** The compiled extension must match your Python architecture.
+> Check with: `python -c "import platform; print(platform.machine())"`
 
-The compiled extension must match your Python architecture
-(e.g. x86_64 under Rosetta vs arm64 native).
+### Build
 
-Check your Python architecture:
-python -c "import platform; print(platform.machine())"
-
-## Build the C++ Module
-
-From the repository root:
-cmake -S cpp -B cpp/build -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=x86_64
+```bash
+cmake -S cpp -B cpp/build -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=arm64
 cmake --build cpp/build -j
+```
 
-The compiled shared library is placed automatically into src/mcop/ so that:
-import mcop._mcop_cpp
+Replace `arm64` with `x86_64` if you are running x86_64 Python (e.g. under Rosetta).
 
-## Verify the Build
+The compiled `.so` is placed automatically into `src/mcop/` so that `import mcop._mcop_cpp` works.
+
+### Verify
+
+```bash
 file src/mcop/_mcop_cpp*.so
 python -c "import mcop._mcop_cpp; print('import ok')"
 pytest -q tests/test_lsm_cpp_matches_python.py
+```
 
-## Using the C++ LSM Pricer
+### Performance
 
-from mcop.american_lsm_cpp import american_option_lsm_cpp
+On macOS (x86_64 Python under Rosetta), benchmarking 200k paths × 100 steps:
 
-price = american_option_lsm_cpp(
-    paths,
-    K=100.0,
-    r=0.05,
-    T=1.0,
-    is_call=False,
-    degree=3,
-)
+```
+Python LSM : 6.0698  in 2.921s
+C++    LSM : 6.0699  in 0.474s
+Speedup    : 6.16×
+```
 
-## Performance
+Benchmark script: `benchmarks/bench_lsm_cpp_vs_py.py`
 
-On macOS (x86_64 Python under Rosetta), benchmarking against the pure-Python
-implementation shows a significant speedup:
+---
 
-Python LSM: 6.069832 in 2.921s
-C++    LSM: 6.069867 in 0.474s
-Speedup: 6.16x
+## Project Structure
 
-Benchmark script: benchmarks/bench_lsm_cpp_vs_py.py
+```
+monte-carlo-option-pricing/
+├── src/mcop/               # Python package
+│   ├── simulate_paths.py   # GBM path simulation (exact discretization)
+│   ├── payoffs.py          # European call/put payoff functions
+│   ├── pricing.py          # Discounted MC estimator with CI
+│   ├── american_lsm.py     # Longstaff–Schwartz (Python)
+│   ├── american_lsm_cpp.py # Longstaff–Schwartz (C++ wrapper)
+│   ├── binomial_tree.py    # CRR binomial tree (reference pricer)
+│   ├── variance_reduction.py # Control variate utilities
+│   ├── analysis.py         # Convergence study helpers
+│   └── cli.py              # Command-line interface
+├── cpp/                    # C++ source (pybind11 + Eigen)
+├── tests/                  # pytest test suite
+├── benchmarks/             # Accuracy and performance benchmarks
+├── notebooks/              # Jupyter demo notebooks
+└── docs/                   # Documentation and roadmap
+```
 
-## Notes
-Benchmark outputs are written to artifacts/ (ignored by git)
-If you switch to native arm64 Python, rebuild the extension with:
--DCMAKE_OSX_ARCHITECTURES=arm64
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE).
