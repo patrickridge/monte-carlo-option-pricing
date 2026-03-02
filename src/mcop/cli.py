@@ -74,17 +74,27 @@ def build_parser() -> argparse.ArgumentParser:
         help="Price an American option using LSM",
     )
 
-    p_price.add_argument("--S0", type=float, default=100.0)
-    p_price.add_argument("--K", type=float, default=100.0)
-    p_price.add_argument("--r", type=float, default=0.05)
-    p_price.add_argument("--q", type=float, default=0.0)
-    p_price.add_argument("--sigma", type=float, default=0.2)
-    p_price.add_argument("--T", type=float, default=1.0)
+    p_price.add_argument("--S0", type=float, default=100.0, metavar="PRICE",
+                         help="Current stock price (default: 100)")
+    p_price.add_argument("--K", type=float, default=100.0, metavar="STRIKE",
+                         help="Strike price (default: 100)")
+    p_price.add_argument("--r", type=float, default=0.05, metavar="RATE",
+                         help="Annualised risk-free rate, e.g. 0.05 for 5%% (default: 0.05)")
+    p_price.add_argument("--q", type=float, default=0.0, metavar="YIELD",
+                         help="Continuous dividend yield (default: 0)")
+    p_price.add_argument("--sigma", type=float, default=0.2, metavar="VOL",
+                         help="Annualised volatility, e.g. 0.2 for 20%% (default: 0.2)")
+    p_price.add_argument("--T", type=float, default=1.0, metavar="YEARS",
+                         help="Time to expiry in years, e.g. 0.25 for 3 months (default: 1.0)")
 
-    p_price.add_argument("--n-steps", dest="n_steps", type=int, default=100)
-    p_price.add_argument("--n-paths", dest="n_paths", type=int, default=50_000)
-    p_price.add_argument("--degree", type=int, default=2)
-    p_price.add_argument("--seed", type=int, default=123)
+    p_price.add_argument("--n-steps", dest="n_steps", type=int, default=100, metavar="N",
+                         help="Number of time steps per path (default: 100)")
+    p_price.add_argument("--n-paths", dest="n_paths", type=int, default=50_000, metavar="N",
+                         help="Number of Monte Carlo paths (default: 50000)")
+    p_price.add_argument("--degree", type=int, default=2, metavar="D",
+                         help="Polynomial degree for LSM regression basis (default: 2)")
+    p_price.add_argument("--seed", type=int, default=123, metavar="SEED",
+                         help="RNG seed for reproducibility (default: 123)")
 
     p_price.add_argument(
         "--call",

@@ -1,9 +1,6 @@
 # Monte Carlo Option Pricing
 
-![Python](https://img.shields.io/badge/python-3.10%2B-blue)
-![License](https://img.shields.io/badge/license-MIT-green)
-
-A research-grade Monte Carlo option pricing library with pure-Python and optional C++ backends.
+A Monte Carlo option pricing library with pure-Python and optional C++ backends.
 
 Supports European and American options under Geometric Brownian Motion (GBM), including:
 
@@ -61,6 +58,33 @@ price = american_option_lsm(paths, K=100, r=0.05, T=1.0, is_call=False)
 payoffs = european_call(paths[:, -1], K=100)
 price, se, ci_low, ci_high = mc_price(payoffs, r=0.05, T=1.0)
 ```
+
+---
+
+## Pricing Real Options
+
+You can price actual market options by supplying real parameters. For example, to price an Apple (AAPL) American put:
+
+```bash
+# AAPL trading at $227, 3-month put with $220 strike
+# Implied vol ~28%, risk-free rate ~4.3%, no dividend
+mcop price --S0 227 --K 220 --r 0.043 --sigma 0.28 --T 0.25 --n-paths 100000
+```
+
+### Where to get each parameter
+
+| Parameter | Description | Where to get it |
+|-----------|-------------|-----------------|
+| `--S0` | Current stock price | Yahoo Finance, Bloomberg, broker |
+| `--K` | Strike price | Options chain (your broker or Yahoo Finance → Options tab) |
+| `--r` | Risk-free rate (annualised) | 3-month US Treasury yield (e.g. [FRED](https://fred.stlouisfed.org/series/DTB3)) |
+| `--sigma` | Volatility (annualised) | Implied vol from the options chain, or compute historical vol from price history |
+| `--T` | Time to expiry in years | `days_to_expiry / 365` (e.g. 30 days → `0.082`) |
+| `--q` | Continuous dividend yield | Annual dividend / stock price (default `0`) |
+| `--n-paths` | Monte Carlo paths | More paths = more accurate. 50k–200k is typical |
+| `--n-steps` | Time steps | 100 is sufficient for most options; use ~252 to match daily trading days |
+
+> **Tip:** For European options, prices will closely match Black–Scholes. For American puts with time value and dividends, the LSM result will differ from Black–Scholes — that's expected and correct.
 
 ---
 
