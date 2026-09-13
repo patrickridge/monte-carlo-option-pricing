@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "mcop"
 version = "0.1.0"
-description = "Monte Carlo option pricing (European + American via LSM)"
+description = "Monte Carlo option pricing, Greeks, and strategy backtesting (European + American via LSM)"
 readme = "README.md"
 authors = [{name="Patrick Ridge"}]
 license = {text = "MIT"}
@@ -18,6 +18,10 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest"]
+# Optional: only needed for market_data.fetch_price_history(). The library works
+# offline via load_price_csv() or synthetic_price_history(), so this is kept out
+# of the hard dependencies rather than tying the install to a scraping package.
+data = ["yfinance"]
 
 [project.urls]
 Homepage = "https://github.com/patrickridge/monte-carlo-option-pricing"
