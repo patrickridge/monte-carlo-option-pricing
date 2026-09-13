@@ -6,7 +6,7 @@ Supports European and American options under Geometric Brownian Motion (GBM), in
 
 - Discounted Monte Carlo estimator with 95% confidence intervals
 - American options via the **Longstaff–Schwartz (LSM)** algorithm
-- Optional **C++ acceleration** (pybind11 + Eigen) — ~6× speedup for the LSM backward pass
+- Optional **C++ acceleration** (pybind11 + Eigen) — ~2× speedup for the LSM backward pass
 - Validation against **Black–Scholes** (European) and **Cox–Ross–Rubinstein binomial tree** (American)
 - Variance reduction via **antithetic variates** and **control variates**
 - CLI for quick pricing from the command line
@@ -169,7 +169,7 @@ mcop price --S0 227 --K 220 --r 0.043 --sigma 0.28 --T 0.25 --n-paths 100000
 | GBM simulation | Exact discretization, dividend yield `q`, antithetic variates |
 | European options | Call and put payoffs with discounted MC estimator |
 | American options | Longstaff–Schwartz LSM, configurable polynomial basis degree |
-| C++ acceleration | pybind11 + Eigen, ~6× faster LSM backward pass |
+| C++ acceleration | pybind11 + Eigen, ~2× faster LSM backward pass (measured natively) |
 | Control variates | Variance reduction using a correlated control with known mean |
 | Black–Scholes | Closed-form price, Greeks, and a robust bisection IV solver |
 | Greeks | Finite difference (common random numbers), pathwise, likelihood ratio |
@@ -280,13 +280,29 @@ pytest -q tests/test_lsm_cpp_matches_python.py
 
 ### Performance
 
-On macOS (x86_64 Python under Rosetta), benchmarking 200k paths × 100 steps:
+Benchmarking 200k paths × 100 steps, 5 repetitions after a warm-up call, on
+**native arm64** (Apple Silicon, Python 3.13):
 
 ```
-Python LSM : 6.0698  in 2.921s
-C++    LSM : 6.0699  in 0.474s
-Speedup    : 6.16×
+Python LSM : 6.069832  median 1.033s
+C++    LSM : 6.069867  median 0.483s
+Speedup    : 2.1x  (1.9x comparing best-of-run to best-of-run)
 ```
+
+**On the earlier 6.16x figure.** A previous build was benchmarked under x86_64
+Python running through Rosetta and reported a 6.16x speedup. That number was an
+artefact of the baseline, not a property of the C++ code: under emulation
+NumPy's vectorised operations are themselves emulated, so the pure-Python LSM
+took 2.921s where it takes ~1.0s natively. The C++ time barely moved between the
+two measurements (0.474s then, 0.483s now) — essentially all of the apparent 6x
+came from a handicapped Python baseline.
+
+The honest figure is therefore **about 2x**, and the reason it is not larger is
+worth stating: the Python implementation is already NumPy-vectorised, so the
+work inside each time step runs in compiled code either way. What C++ removes is
+the per-step interpreter overhead and the temporary array allocations in the
+backward induction loop — real, but not an order of magnitude. A 6x claim would
+only be defensible against a naive Python loop.
 
 Benchmark script: `benchmarks/bench_lsm_cpp_vs_py.py`
 
