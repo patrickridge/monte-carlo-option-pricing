@@ -24,9 +24,15 @@ On top of the pricing engine sits a **strategy and risk layer**:
   assignment, and no look-ahead
 - **Performance analytics** — Sharpe, Sortino, drawdown, VaR/CVaR, trade stats
 
-See **[docs/STRATEGIES.md](docs/STRATEGIES.md)** for a full walkthrough of that
-layer, including an explicit account of what the backtest can and cannot tell
-you.
+![Payoff diagrams for all nine strategies](docs/figures/strategy_payoffs.png)
+
+Two guides to that layer:
+
+- **[docs/STRATEGY_GUIDE.md](docs/STRATEGY_GUIDE.md)** — plain language, no options
+  knowledge assumed: what each structure is, what its payoff shape means, and what
+  the backtester does with it.
+- **[docs/STRATEGIES.md](docs/STRATEGIES.md)** — the engineering rationale, including
+  an explicit account of what the backtest can and cannot tell you.
 
 ---
 
@@ -223,6 +229,12 @@ exit**. Backtesting the same rules with and without that friction:
 The strategy goes from breakeven to reliably losing — friction costs about
 **18 per round trip** against an edge that was never worth more than a few
 pounds a trade.
+
+![Equity curves with and without transaction costs](docs/figures/backtest_costs.png)
+
+The lower panel shows the shape that makes short-premium strategies dangerous to
+judge by win rate: many small gains around +60, punctuated by losses reaching
+-255. A high win rate and a negative expectancy coexist comfortably.
 
 Comparing structures under identical rules, the four-legged iron condor
 (−760) does worst and the two-legged short strangle (+81) does better, which is
