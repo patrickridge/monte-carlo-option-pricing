@@ -21,7 +21,8 @@ import numpy as np
 
 from mcop.backtest import BacktestConfig, CostModel, run_backtest
 from mcop.instruments import Right, Style
-from mcop.market_data import MarketState, SkewedVolSurface, synthetic_price_history
+from mcop.market_data import (MarketState, SkewedVolSurface, load_price_csv,
+                              synthetic_price_history)
 from mcop.portfolio import position_value, value_curve
 from mcop.performance import summarize
 from mcop import strategies as st
@@ -135,8 +136,16 @@ def payoff_grid() -> None:
 
 def backtest_figure() -> None:
     """Equity curves with and without transaction costs, plus the trade P&L spread."""
-    history = synthetic_price_history("SYNTH", S0=100.0, mu=0.08, sigma=0.20,
-                                      n_days=756, seed=42, vol_of_vol=0.6)
+    # Real SPY closes, 2015-2024. Deliberately not the synthetic series: geometric
+    # Brownian motion has no fat tails and no volatility clustering, which are
+    # precisely the features that hurt a short-premium strategy. Backtesting this
+    # on simulated paths would flatter it.
+    csv = Path(__file__).resolve().parents[1] / "data" / "spy_daily.csv"
+    if csv.exists():
+        history = load_price_csv(csv, symbol="SPY")
+    else:  # fall back so the repo still runs with no data file present
+        history = synthetic_price_history("SYNTH", S0=100.0, mu=0.08, sigma=0.20,
+                                          n_days=756, seed=42, vol_of_vol=0.6)
     free = CostModel(commission_per_contract=0.0, spread_frac_of_price=0.0, min_spread=0.0)
 
     runs = {}
@@ -156,8 +165,8 @@ def backtest_figure() -> None:
                  label=f"{label}  (total P&L {rpt.total_pnl:,.0f})")
 
     ax1.axhline(100_000, color=MUTED, lw=0.8, ls=":")
-    ax1.set_title("Iron condor, 20-delta shorts, 5-wide wings — the cost of crossing the "
-                  "spread eight times per round trip",
+    ax1.set_title(f"Iron condor on {history.symbol} {history.dates[0]:%Y}-{history.dates[-1]:%Y}, "
+                  "20-delta shorts — the cost of crossing the spread 8x per round trip",
                   fontsize=10, color=INK, loc="left")
     ax1.set_ylabel("account equity", fontsize=8.5, color=MUTED)
     ax1.legend(fontsize=8, frameon=False)

@@ -205,20 +205,31 @@ Whichever comes first:
 
 ![Equity curves with and without transaction costs](figures/backtest_costs.png)
 
-**Costs dominate.** The same iron condor rules, run with and without realistic
-bid/ask and commission:
+**Costs dominate.** The same iron condor rules on **real SPY closes, 2015-2024**,
+with and without realistic bid/ask and commission:
 
 | | Frictionless | Retail costs |
 |---|---|---|
-| Total P&L | +16.91 | **−759.57** |
-| Profit factor | 1.01 | 0.63 |
-| Per trade | +0.37 | **−17.66** |
+| Trades | 164 | 160 |
+| Win rate | 63.4% | 58.8% |
+| Total P&L | **+1,168.82** | **−2,227.35** |
+| Per trade | +7.13 | **−13.92** |
+| Max drawdown | −0.89% | **−3.04%** |
 
-A four-legged structure crosses the spread eight times per round trip. That
-friction is larger than the edge.
+There was real edge to begin with — the period carried a genuine variance risk
+premium and the strategy made money at mid prices. A four-legged structure
+crosses the spread eight times per round trip, and that friction (about 21 per
+round trip) turned +1,169 into −2,227.
+
+For scale: **buy-and-hold on SPY returned 239.6%** over the same window.
+
+The largest losses land on real events — the August 2015 flash crash and
+February 2018's "Volmageddon" are both in the worst six trades. A short-premium
+position is structurally short exactly those days.
 
 **Managing trades made it worse.** Sweeping the exit rules with costs switched
-off, so the rules are isolated:
+off, so the rules are isolated (this sweep was run on the simulated series, so
+read the ordering rather than the absolute numbers):
 
 | Profit target | Stop | Trades | Win rate | Total P&L |
 |---|---|---|---|---|
@@ -242,7 +253,9 @@ Option prices in the backtest are **modelled, not observed**. Historical option
 chains are a paid dataset, so each option is marked using a volatility surface
 anchored to the underlying's actual realised volatility.
 
-The stock path is real, so the directional behaviour is genuine. The option
+The stock path is real — SPY closes from 2015 to 2024, including the 2018
+volatility spike, the 2020 crash and the 2022 bear market — so the directional
+behaviour is genuine. The option
 pricing layer on top is a model, and a smooth one: it cannot reproduce a
 volatility spike that front-runs a crash, or spreads gapping untradeable exactly
 when you need to get out.

@@ -217,76 +217,43 @@ with `python benchmarks/bench_greeks.py`.
 
 ### Transaction costs dominate multi-leg option strategies
 
+Backtested on **real SPY closes, 2015-2024** (2,516 days). Using real prices
+matters here more than it might seem: a short-premium strategy is structurally
+short fat tails and volatility clustering, and geometric Brownian motion has
+neither.
+
+| | Annualised vol | Skew | Excess kurtosis |
+|---|---|---|---|
+| Real SPY | 17.7% | -0.80 | **13.6** |
+| Simulated GBM | 19.4% | -0.19 | **0.6** |
+
+Same volatility, twenty times the tail. SPY's worst day in the sample was
+**-11.59%**, a 10-sigma move that GBM assigns a probability of roughly 1 in
+10^25.
+
 An iron condor crosses the bid/ask **four times on entry and four more on
-exit**. Backtesting the same rules with and without that friction:
+exit**. The same rules, with and without that friction:
 
-| | frictionless | retail costs (2% spread, $0.65/contract) |
-|---|---|---|
-| total P&L | **+16.91** | **−759.57** |
-| profit factor | 1.01 | 0.63 |
-| expectancy per trade | +0.37 | **−17.66** |
+| | Trades | Win rate | Total P&L | Per trade | Max drawdown |
+|---|---|---|---|---|---|
+| Frictionless | 164 | 63.4% | **+1,168.82** | +7.13 | -0.89% |
+| Retail costs | 160 | 58.8% | **-2,227.35** | -13.92 | **-3.04%** |
 
-The strategy goes from breakeven to reliably losing — friction costs about
-**18 per round trip** against an edge that was never worth more than a few
-pounds a trade.
+There was genuine edge here — 2015-2024 carried a real variance risk premium,
+and the strategy made money at mid prices. Costs erased it and then some: a
+**3,396 swing**, about 21 per round trip.
 
 ![Equity curves with and without transaction costs](docs/figures/backtest_costs.png)
 
-The lower panel shows the shape that makes short-premium strategies dangerous to
-judge by win rate: many small gains around +60, punctuated by losses reaching
--255. A high win rate and a negative expectancy coexist comfortably.
+Two things worth noting beyond the headline. **Buy-and-hold returned 239.6%**
+over the same window while the condor lost money. And the strategy's largest
+losses cluster on real events — the August 2015 flash crash and February 2018's
+"Volmageddon" both appear in the worst six trades, which is exactly what a
+short-gamma position should do.
 
-Comparing structures under identical rules, the four-legged iron condor
-(−760) does worst and the two-legged short strangle (+81) does better, which is
-what you would expect when friction scales with leg count. The single-leg
-results are *not* a clean continuation of that pattern, though: short puts and
-covered calls both carry directional exposure, and the underlying rose 20% over
-this sample, so their profits are substantially long-stock P&L rather than
-evidence about costs. Reproduce with `python benchmarks/bench_backtest.py`.
-
-> **Read these as strategy mechanics under a stated volatility model, not as
-> historical P&L.** Option prices in the backtest are modelled from a
-> parameterised vol surface anchored to realised volatility, because historical
-> option chains are not freely available. See
-> [docs/STRATEGIES.md §6](docs/STRATEGIES.md) for exactly what that does and
-> does not permit you to conclude.
-
-### Exotics: two numerical techniques that pay for themselves
-
-**Barrier discretisation bias, fixed by a Brownian bridge.** A discretely sampled
-path can cross a barrier *between* observations and come back, so a naive check
-under-detects knock-outs and prices them too high. Conditional on its endpoints
-the path is a Brownian bridge, and the probability it touched the level has a
-closed form. Weighting each path by its survival probability, rather than a hard
-0/1 indicator, targets the continuously-monitored price:
-
-| Steps | Naive error | Bridged error | Improvement |
-|-------|------------|---------------|-------------|
-| 25    | +0.716     | **+0.024**    | 29x         |
-| 100   | +0.389     | **+0.016**    | 24x         |
-| 400   | +0.184     | **-0.013**    | 14x         |
-
-The naive error decays like `1/sqrt(steps)`, so brute force is not a fix — 16x the
-work buys about 4x the accuracy. The bridge at 25 steps beats naive sampling at
-400 steps.
-
-**Control variates on Asian options.** The arithmetic-average Asian has no closed
-form; the geometric one does, and the two payoffs correlate at **0.9996**. Using
-the known geometric price to correct the arithmetic estimate cuts the standard
-error **36x** — equivalent to roughly 1,300x more paths, at no extra cost.
-
-**Digitals decide which Greek estimator you need.** A digital's payoff is a step
-function, and the estimators reverse their ranking on it:
-
-| Payoff | Pathwise | Likelihood ratio | Finite difference |
-|--------|----------|------------------|-------------------|
-| Vanilla call | best | noisiest (sd 0.0066) | sd 0.0009 |
-| Digital call | **cannot be applied** | **best (sd 0.00004)** | sd 0.00011 |
-
-Pathwise differentiates the payoff, and a step function's derivative is zero
-everywhere except a single point no sample lands on — so it would return a
-confident zero. The library raises instead. Likelihood ratio differentiates the
-*density* and never touches the payoff, which is exactly why it exists.
+The lower panel shows the shape that makes these strategies easy to misjudge:
+many small gains punctuated by much larger losses. A 59% win rate and a negative
+expectancy coexist comfortably.
 
 ### The engine is unbiased
 
