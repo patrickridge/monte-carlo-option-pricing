@@ -68,6 +68,8 @@ which for American exercise is always.
 
 from __future__ import annotations
 
+from typing import Callable
+
 import numpy as np
 
 from .black_scholes import Greeks
@@ -75,6 +77,12 @@ from .simulate_paths import draw_normals, gbm_paths_from_normals
 from .american_lsm import american_option_lsm
 
 __all__ = ["mc_greeks"]
+
+# A payoff takes the full path array, shape (n_paths, n_steps + 1), and returns
+# one undiscounted payoff per path. Taking whole paths rather than terminal
+# prices is what allows path-dependent exotics (Asian, barrier, lookback) to be
+# risked with the same machinery as a vanilla.
+PayoffFn = Callable[[np.ndarray], np.ndarray]
 
 
 def _terminal_payoff(ST: np.ndarray, K: float, is_call: bool) -> np.ndarray:
@@ -94,25 +102,31 @@ def _price_from_normals(
     is_call: bool,
     style: str,
     degree: int,
+    payoff: PayoffFn | None = None,
 ) -> float:
     """
     Price a single option from a fixed shock matrix.
 
     Every finite-difference bump routes through here with the *same* Z, which is
     what makes the differences common-random-number differences.
+
+    `payoff` replaces the vanilla terminal payoff with an arbitrary function of
+    the whole path, which is what lets this price and risk the exotics in
+    `mcop.exotics`.
     """
     paths = gbm_paths_from_normals(Z, S0=S0, r=r, sigma=sigma, T=T, q=q)
 
     if style == "american":
         return float(american_option_lsm(paths, K=K, r=r, T=T, is_call=is_call, degree=degree, q=q))
 
-    payoffs = _terminal_payoff(paths[:, -1], K, is_call)
-    return float(np.exp(-r * T) * payoffs.mean())
+    payoffs = payoff(paths) if payoff is not None else _terminal_payoff(paths[:, -1], K, is_call)
+    return float(np.exp(-r * T) * np.asarray(payoffs, dtype=float).mean())
 
 
 def _greeks_fd(
     Z, S0, K, r, q, sigma, T, is_call, style, degree,
     rel_bump: float, vol_bump: float, t_bump: float, r_bump: float,
+    payoff: PayoffFn | None = None,
 ) -> Greeks:
     """
     Central finite differences under common random numbers.
@@ -126,7 +140,7 @@ def _greeks_fd(
     h_S = rel_bump * S0
 
     def price_at(S0_=S0, sigma_=sigma, T_=T, r_=r):
-        return _price_from_normals(Z, S0_, K, r_, q, sigma_, T_, is_call, style, degree)
+        return _price_from_normals(Z, S0_, K, r_, q, sigma_, T_, is_call, style, degree, payoff)
 
     base = price_at()
 
@@ -212,6 +226,7 @@ def _greeks_pathwise(
 def _greeks_lr(
     Z, S0, K, r, q, sigma, T, is_call, degree,
     t_bump: float, r_bump: float,
+    payoff: PayoffFn | None = None,
 ) -> Greeks:
     """
     Likelihood-ratio (score function) estimators.
@@ -232,7 +247,8 @@ def _greeks_lr(
     ST = paths[:, -1]
     disc = np.exp(-r * T)
 
-    payoffs = _terminal_payoff(ST, K, is_call)
+    payoffs = payoff(paths) if payoff is not None else _terminal_payoff(ST, K, is_call)
+    payoffs = np.asarray(payoffs, dtype=float)
     price = float(disc * payoffs.mean())
 
     Z_T = _terminal_normal(paths, S0, r, q, sigma, T)
@@ -244,7 +260,7 @@ def _greeks_lr(
     vega = float(disc * np.mean(payoffs * ((Z_T**2 - 1.0) / sigma - Z_T * sqrt_T)))
 
     def price_at(sigma_=sigma, T_=T, r_=r):
-        return _price_from_normals(Z, S0, K, r_, q, sigma_, T_, is_call, "european", degree)
+        return _price_from_normals(Z, S0, K, r_, q, sigma_, T_, is_call, "european", degree, payoff)
 
     h_T = min(t_bump, 0.5 * T)
     theta = -(price_at(T_=T + h_T) - price_at(T_=T - h_T)) / (2.0 * h_T)
@@ -272,6 +288,7 @@ def mc_greeks(
     vol_bump: float = 1e-3,
     t_bump: float = 1e-3,
     r_bump: float = 1e-4,
+    payoff: PayoffFn | None = None,
 ) -> Greeks:
     """
     Estimate price and Greeks by Monte Carlo.
@@ -283,6 +300,17 @@ def mc_greeks(
         supports method="fd".
     method : "fd", "pathwise", or "lr"
         See the module docstring for the trade-offs.
+    payoff : callable, optional
+        Custom payoff taking the full path array and returning one undiscounted
+        payoff per path — see `mcop.exotics`. Supported by "fd" and "lr", both
+        of which need only payoff *values*. Not supported by "pathwise", which
+        needs the payoff's derivative and cannot obtain it from an opaque
+        callable; that restriction is enforced rather than silently approximated.
+
+        The digital payoff is the case worth trying: it is a step function, so
+        pathwise would return exactly zero delta even if it could be applied,
+        while "lr" handles it correctly because it never differentiates the
+        payoff at all.
 
     Returns
     -------
@@ -311,6 +339,18 @@ def mc_greeks(
         raise ValueError("sigma must be positive for Greeks (the vol derivative is undefined at 0)")
     if T <= 0:
         raise ValueError("T must be positive")
+    if payoff is not None and method == "pathwise":
+        raise ValueError(
+            "method='pathwise' cannot take a custom payoff: it differentiates the payoff "
+            "along each path, which requires knowing that derivative analytically. Use "
+            "method='lr' (differentiates the density, so the payoff is never touched) or "
+            "method='fd' (treats the payoff as a black box)."
+        )
+    if payoff is not None and style == "american":
+        raise ValueError(
+            "custom payoffs are not supported with American exercise: the Longstaff–Schwartz "
+            "regression assumes the vanilla intrinsic value defines the exercise decision."
+        )
 
     Z = draw_normals(n_steps=n_steps, n_paths=n_paths, seed=seed, antithetic=antithetic)
 
@@ -318,10 +358,14 @@ def mc_greeks(
         return _greeks_fd(
             Z, S0, K, r, q, sigma, T, is_call, style, degree,
             rel_bump=rel_bump, vol_bump=vol_bump, t_bump=t_bump, r_bump=r_bump,
+            payoff=payoff,
         )
     if method == "pathwise":
         return _greeks_pathwise(
             Z, S0, K, r, q, sigma, T, is_call, degree,
             vol_bump=vol_bump, t_bump=t_bump, r_bump=r_bump,
         )
-    return _greeks_lr(Z, S0, K, r, q, sigma, T, is_call, degree, t_bump=t_bump, r_bump=r_bump)
+    return _greeks_lr(
+        Z, S0, K, r, q, sigma, T, is_call, degree,
+        t_bump=t_bump, r_bump=r_bump, payoff=payoff,
+    )

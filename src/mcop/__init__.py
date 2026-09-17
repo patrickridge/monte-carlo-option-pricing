@@ -26,6 +26,22 @@ from .analysis import convergence_study, plot_convergence
 from .black_scholes import Greeks, bs_price, bs_greeks, implied_vol
 from .greeks import mc_greeks
 
+from .exotics import (
+    asian_payoff,
+    asian_price_with_control,
+    barrier_payoff,
+    barrier_survival_probability,
+    digital_payoff,
+    lookback_payoff,
+)
+from .exotic_analytic import (
+    digital_asset_or_nothing,
+    digital_cash_or_nothing,
+    down_and_in_call,
+    down_and_out_call,
+    geometric_asian_price,
+)
+
 from .instruments import (
     DAYS_PER_YEAR,
     Leg,
@@ -111,6 +127,18 @@ __all__ = [
     "bs_greeks",
     "implied_vol",
     "mc_greeks",
+    # exotics
+    "asian_payoff",
+    "asian_price_with_control",
+    "barrier_payoff",
+    "barrier_survival_probability",
+    "digital_payoff",
+    "lookback_payoff",
+    "digital_asset_or_nothing",
+    "digital_cash_or_nothing",
+    "down_and_in_call",
+    "down_and_out_call",
+    "geometric_asian_price",
     # instruments
     "DAYS_PER_YEAR",
     "Leg",

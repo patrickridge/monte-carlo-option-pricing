@@ -9,6 +9,8 @@ Supports European and American options under Geometric Brownian Motion (GBM), in
 - Optional **C++ acceleration** (pybind11 + Eigen) — ~2× speedup for the LSM backward pass
 - Validation against **Black–Scholes** (European) and **Cox–Ross–Rubinstein binomial tree** (American)
 - Variance reduction via **antithetic variates** and **control variates**
+- **Exotic payoffs** — Asian, lookback, barrier and digital — with a Brownian-bridge
+  correction for barrier discretisation bias
 - CLI for quick pricing from the command line
 
 On top of the pricing engine sits a **strategy and risk layer**:
@@ -173,6 +175,8 @@ mcop price --S0 227 --K 220 --r 0.043 --sigma 0.28 --T 0.25 --n-paths 100000
 | Control variates | Variance reduction using a correlated control with known mean |
 | Black–Scholes | Closed-form price, Greeks, and a robust bisection IV solver |
 | Greeks | Finite difference (common random numbers), pathwise, likelihood ratio |
+| Exotics | Asian (arithmetic/geometric), lookback, barrier (in/out, up/down), digital |
+| Exotic validation | Closed forms for digitals, geometric Asians and down-barriers |
 | Positions | Signed multi-leg legs with netted value and additive Greeks |
 | Strategies | Covered call, collar, verticals, straddle, strangle, condor, butterfly, calendar |
 | Strike selection | Delta-targeted strikes solved off the vol surface |
@@ -234,6 +238,43 @@ evidence about costs. Reproduce with `python benchmarks/bench_backtest.py`.
 > option chains are not freely available. See
 > [docs/STRATEGIES.md §6](docs/STRATEGIES.md) for exactly what that does and
 > does not permit you to conclude.
+
+### Exotics: two numerical techniques that pay for themselves
+
+**Barrier discretisation bias, fixed by a Brownian bridge.** A discretely sampled
+path can cross a barrier *between* observations and come back, so a naive check
+under-detects knock-outs and prices them too high. Conditional on its endpoints
+the path is a Brownian bridge, and the probability it touched the level has a
+closed form. Weighting each path by its survival probability, rather than a hard
+0/1 indicator, targets the continuously-monitored price:
+
+| Steps | Naive error | Bridged error | Improvement |
+|-------|------------|---------------|-------------|
+| 25    | +0.716     | **+0.024**    | 29x         |
+| 100   | +0.389     | **+0.016**    | 24x         |
+| 400   | +0.184     | **-0.013**    | 14x         |
+
+The naive error decays like `1/sqrt(steps)`, so brute force is not a fix — 16x the
+work buys about 4x the accuracy. The bridge at 25 steps beats naive sampling at
+400 steps.
+
+**Control variates on Asian options.** The arithmetic-average Asian has no closed
+form; the geometric one does, and the two payoffs correlate at **0.9996**. Using
+the known geometric price to correct the arithmetic estimate cuts the standard
+error **36x** — equivalent to roughly 1,300x more paths, at no extra cost.
+
+**Digitals decide which Greek estimator you need.** A digital's payoff is a step
+function, and the estimators reverse their ranking on it:
+
+| Payoff | Pathwise | Likelihood ratio | Finite difference |
+|--------|----------|------------------|-------------------|
+| Vanilla call | best | noisiest (sd 0.0066) | sd 0.0009 |
+| Digital call | **cannot be applied** | **best (sd 0.00004)** | sd 0.00011 |
+
+Pathwise differentiates the payoff, and a step function's derivative is zero
+everywhere except a single point no sample lands on — so it would return a
+confident zero. The library raises instead. Likelihood ratio differentiates the
+*density* and never touches the payoff, which is exactly why it exists.
 
 ### The engine is unbiased
 
@@ -325,6 +366,8 @@ monte-carlo-option-pricing/
 │   │                       # -- risk and strategy layer --
 │   ├── black_scholes.py    # Closed-form price, Greeks, implied vol solver
 │   ├── greeks.py           # MC Greeks: finite difference / pathwise / likelihood ratio
+│   ├── exotics.py          # Asian, lookback, barrier, digital payoffs
+│   ├── exotic_analytic.py  # Closed forms used to validate the exotics
 │   ├── instruments.py      # Contracts, signed legs, multi-leg positions
 │   ├── market_data.py      # Price history, realised vol, implied vol surface
 │   ├── portfolio.py        # Valuation and risk netting across legs
