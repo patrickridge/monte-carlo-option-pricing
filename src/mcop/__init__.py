@@ -7,6 +7,8 @@ The package is layered, and each layer only depends on the ones above it:
     american_lsm / binomial_tree            early-exercise pricers
     black_scholes                           closed-form reference and fast marks
     greeks                                  MC risk sensitivities
+    qmc                                     Sobol sequences and Brownian bridge
+    exotics / exotic_analytic               path-dependent payoffs and their closed forms
     instruments                             contracts, legs, positions
     market_data                             price history and the vol surface
     portfolio                               valuation and risk netting
@@ -26,6 +28,12 @@ from .analysis import convergence_study, plot_convergence
 from .black_scholes import Greeks, bs_price, bs_greeks, implied_vol
 from .greeks import mc_greeks
 
+from .qmc import (
+    bridge_order,
+    qmc_price,
+    rqmc_estimate,
+    sobol_normals,
+)
 from .exotics import (
     asian_payoff,
     asian_price_with_control,
@@ -127,6 +135,11 @@ __all__ = [
     "bs_greeks",
     "implied_vol",
     "mc_greeks",
+    # quasi-Monte Carlo
+    "sobol_normals",
+    "qmc_price",
+    "rqmc_estimate",
+    "bridge_order",
     # exotics
     "asian_payoff",
     "asian_price_with_control",

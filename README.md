@@ -11,6 +11,8 @@ Supports European and American options under Geometric Brownian Motion (GBM), in
 - Variance reduction via **antithetic variates** and **control variates**
 - **Exotic payoffs** — Asian, lookback, barrier and digital — with a Brownian-bridge
   correction for barrier discretisation bias
+- **Quasi-Monte Carlo** — scrambled Sobol sequences with Brownian bridge path
+  construction, and randomised QMC for honest error bars
 - CLI for quick pricing from the command line
 
 On top of the pricing engine sits a **strategy and risk layer**:
@@ -182,6 +184,7 @@ mcop price --S0 227 --K 220 --r 0.043 --sigma 0.28 --T 0.25 --n-paths 100000
 | Black–Scholes | Closed-form price, Greeks, and a robust bisection IV solver |
 | Greeks | Finite difference (common random numbers), pathwise, likelihood ratio |
 | Exotics | Asian (arithmetic/geometric), lookback, barrier (in/out, up/down), digital |
+| Quasi-Monte Carlo | Scrambled Sobol, Brownian bridge construction, randomised QMC error bars |
 | Exotic validation | Closed forms for digitals, geometric Asians and down-barriers |
 | Positions | Signed multi-leg legs with netted value and additive Greeks |
 | Strategies | Covered call, collar, verticals, straddle, strangle, condor, butterfly, calendar |
@@ -254,6 +257,65 @@ short-gamma position should do.
 The lower panel shows the shape that makes these strategies easy to misjudge:
 many small gains punctuated by much larger losses. A 59% win rate and a negative
 expectancy coexist comfortably.
+
+### Quasi-Monte Carlo: fewer paths, better answers
+
+Pseudo-random numbers clump — any finite sample leaves regions crowded and
+others empty, and those gaps are the error. That is why Monte Carlo converges
+only as `1/sqrt(N)`: quadrupling the work halves the error. A Sobol sequence
+places points deliberately rather than randomly, filling the space evenly.
+
+Error against the exact Black-Scholes price, European call, 50 time steps:
+
+| Paths | Pseudo-random | Sobol | **Sobol + Brownian bridge** |
+|-------|--------------|-------|------------------------|
+| 1,024 | 0.458 | 0.102 | **0.0167** |
+| 16,384 | 0.046 | 0.016 | **0.00085** |
+| 65,536 | 0.0436 | 0.0073 | **0.00014** |
+
+Read across: plain Sobol is a modest gain, Sobol **with the Brownian bridge
+construction** is a large one. A 50-step path needs a 50-dimensional sequence,
+and Sobol points are far better distributed in early dimensions than late ones.
+Mapping dimension *i* to time step *i* wastes the good dimensions on fine
+detail; the bridge construction puts them on the terminal value, then the
+midpoint, then the quarter points — the features carrying the variance.
+
+The practical version of the same result:
+
+> **4,096 quasi-random paths are more accurate than 1,048,576 pseudo-random
+> ones** — over 250x less compute for a better answer.
+
+**Randomised QMC keeps the error bar.** A standard error is computed *from*
+sampling randomness, which QMC deliberately removes — so plain QMC returns a
+number with no confidence interval, which is unacceptable for pricing.
+Averaging over independently *scrambled* copies of the same Sobol sequence
+restores it:
+
+| | Estimate | Error bar | Actual error |
+|---|---|---|---|
+| Plain Monte Carlo, 4,096 paths | 10.44668 | ± 0.06306 | 0.0039 |
+| Randomised QMC, 4,096 paths | 10.45027 | **± 0.00066** | **0.0003** |
+
+96x tighter, and still honest — each scramble is an independent randomisation
+of the same low-discrepancy point set.
+
+### The result holds across underlyings
+
+All 160 SPY trades share one underlying and one decade, so the same rules were
+run on QQQ and IWM with the spread assumption scaled to each one's real
+liquidity — otherwise you are only testing different price paths, not different
+liquidity.
+
+| Underlying | Ann. vol | Excess kurtosis | Spread assumed | Gross P&L | Net P&L | Per trade |
+|---|---|---|---|---|---|---|
+| SPY | 17.7% | 13.6 | 2.0% | +1,169 | **−2,227** | −13.92 |
+| QQQ | 21.9% | 6.8 | 3.0% | +771 | **−2,796** | −17.81 |
+| IWM | 22.6% | 9.3 | 4.5% | +1,443 | **−2,315** | −14.56 |
+
+**Every underlying shows positive gross edge and negative net.** The variance
+risk premium is real in all three; transaction costs consume it in all three.
+Note the ordering is not simply by spread — IWM has the widest spread but not
+the worst net result, because it also had the largest gross edge.
 
 ### The engine is unbiased
 
@@ -345,6 +407,7 @@ monte-carlo-option-pricing/
 │   │                       # -- risk and strategy layer --
 │   ├── black_scholes.py    # Closed-form price, Greeks, implied vol solver
 │   ├── greeks.py           # MC Greeks: finite difference / pathwise / likelihood ratio
+│   ├── qmc.py              # Sobol sequences, Brownian bridge, randomised QMC
 │   ├── exotics.py          # Asian, lookback, barrier, digital payoffs
 │   ├── exotic_analytic.py  # Closed forms used to validate the exotics
 │   ├── instruments.py      # Contracts, signed legs, multi-leg positions
